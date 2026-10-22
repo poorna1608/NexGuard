@@ -1,0 +1,44 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  name             String
+  passwordHash     String
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @default(now()) @updatedAt
+  scans            Scan[]
+}
+
+model Scan {
+  id              String   @id @default(cuid())
+  userId          String?
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  originalUrl     String
+  normalizedUrl   String?
+  hostname        String?
+  ipAddress       String?
+  score           Int
+  classification  String
+  status          String   @default("completed")
+  findings        String   @default("[]")
+  providerResults String?  @default("{}")
+  domainInfo      String?  @default("{}")
+  certificateInfo String?  @default("{}")
+  redirectChain   String?  @default("[]")
+  notes           String?  @default("[]")
+  createdAt       DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+  @@index([classification])
+}

@@ -1,0 +1,11 @@
+{
+  "name": "nexguard-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix nexguard run dev",
+    "build": "npm --prefix nexguard run build",
+    "start": "npm --prefix nexguard run start",
+    "test": "npm --prefix nexguard test",
+    "typecheck": "npm --prefix nexguard run typecheck"
+  }
+}
