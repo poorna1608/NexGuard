@@ -21,6 +21,8 @@ import {
   ChevronUp,
 } from "lucide-react";
 import { ComprehensiveScanResult, Finding } from "@/lib/scanner/types";
+import { ProviderStatusBadge } from "./ProviderStatusBadge";
+import { UrlAnatomyExplorer } from "./UrlAnatomyExplorer";
 
 const SAMPLE_URLS = [
   { label: "Clean Site", url: "https://www.wikipedia.org" },
@@ -34,7 +36,6 @@ export function ScanForm({ initialUrl = "" }: { initialUrl?: string }) {
   const [url, setUrl] = useState(initialUrl);
   const [deepScan, setDeepScan] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [scanStep, setScanStep] = useState<string>("");
   const [result, setResult] = useState<ComprehensiveScanResult | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [isSaved, setIsSaved] = useState(false);
@@ -50,16 +51,6 @@ export function ScanForm({ initialUrl = "" }: { initialUrl?: string }) {
     setError("");
     setResult(null);
     setSavedId(null);
-    setScanStep("Analyzing URL structure & syntax heuristics...");
-
-    // Simulated step transitions for SOC feel
-    const stepTimer1 = setTimeout(() => {
-      setScanStep("Querying VirusTotal, Safe Browsing & URLhaus threat feeds...");
-    }, 400);
-
-    const stepTimer2 = setTimeout(() => {
-      setScanStep("Inspecting DNS records, TLS certificate & redirect hops...");
-    }, 1100);
 
     try {
       const res = await fetch("/api/scan", {
@@ -68,12 +59,8 @@ export function ScanForm({ initialUrl = "" }: { initialUrl?: string }) {
         body: JSON.stringify({ url: urlToScan, deepScan }),
       });
 
-      clearTimeout(stepTimer1);
-      clearTimeout(stepTimer2);
-
       const data = await res.json();
       setBusy(false);
-      setScanStep("");
 
       if (!res.ok) {
         setError(data.error || "URL scan failed.");
@@ -84,10 +71,7 @@ export function ScanForm({ initialUrl = "" }: { initialUrl?: string }) {
       setSavedId(data.id || null);
       setIsSaved(data.saved || false);
     } catch (err: any) {
-      clearTimeout(stepTimer1);
-      clearTimeout(stepTimer2);
       setBusy(false);
-      setScanStep("");
       setError(`Network error connecting to scanner: ${err.message}`);
     }
   }
@@ -126,7 +110,7 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
                 type="text"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
-                placeholder="Enter suspicious URL or domain (e.g. https://paypal-security-login.xyz)"
+                placeholder="Paste a web URL, domain, IP address, or shortened link"
                 className="soc-input font-mono text-sm sm:text-base text-slate-900 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 shadow-sm"
                 style={{ paddingLeft: "3.25rem", paddingRight: "5.5rem" }}
                 required
@@ -161,6 +145,12 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
               )}
             </button>
           </div>
+
+          <p className="text-xs text-soc-muted">
+            Checks HTTP and HTTPS addresses, including links with ports, IP addresses,
+            and shortened URLs. You can omit the scheme; NexGuard assumes HTTPS.
+            Other protocols are not supported.
+          </p>
 
           {/* Quick Options & Sample Links */}
           <div className="flex flex-wrap items-center justify-between gap-3 pt-2 text-xs text-soc-muted">
@@ -198,13 +188,19 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
 
         {/* Live Scan Step Progress */}
         {busy && (
-          <div className="mt-4 rounded-lg border border-soc-accent/30 bg-soc-accent/5 p-3.5 text-xs">
+          <div
+            className="mt-4 rounded-lg border border-soc-accent/30 bg-soc-accent/5 p-3.5 text-xs"
+            role="status"
+            aria-live="polite"
+          >
             <div className="flex items-center gap-2.5 text-soc-accent">
               <RefreshCw className="h-4 w-4 animate-spin text-soc-accent" />
-              <span className="font-medium animate-pulse">{scanStep || "Processing URL..."}</span>
+              <span className="font-medium">
+                Running URL analysis. Provider and network checks may take several seconds.
+              </span>
             </div>
             <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-soc-dark">
-              <div className="h-full w-full bg-gradient-to-r from-soc-blue to-soc-accent animate-pulse"></div>
+              <div className="h-full w-1/3 rounded-full bg-soc-accent animate-pulse"></div>
             </div>
           </div>
         )}
@@ -270,6 +266,11 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
                 <p className="text-sm text-soc-text max-w-2xl leading-relaxed">
                   {result.summary}
                 </p>
+                {result.status === "partial" && (
+                  <p className="text-xs font-medium text-soc-amber" role="status">
+                    Some checks did not complete. Review each provider status below; this result is not a safety clearance.
+                  </p>
+                )}
               </div>
 
               {/* Risk Score Dial */}
@@ -279,11 +280,13 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
                 </span>
                 <div
                   className={`text-4xl font-extrabold my-1 ${
-                    result.score >= 65
+                    result.classification === "MALICIOUS"
                       ? "text-soc-rose"
                       : result.score >= 25
                       ? "text-soc-amber"
-                      : "text-soc-emerald"
+                      : result.classification === "NO THREAT DETECTED"
+                      ? "text-soc-emerald"
+                      : "text-soc-muted"
                   }`}
                 >
                   {result.score}
@@ -294,11 +297,13 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
                 <div className="h-2 w-28 overflow-hidden rounded-full bg-soc-card">
                   <div
                     className={`h-full transition-all duration-500 ${
-                      result.score >= 65
+                      result.classification === "MALICIOUS"
                         ? "bg-soc-rose"
                         : result.score >= 25
                         ? "bg-soc-amber"
-                        : "bg-soc-emerald"
+                        : result.classification === "NO THREAT DETECTED"
+                        ? "bg-soc-emerald"
+                        : "bg-soc-muted"
                     }`}
                     style={{ width: `${Math.max(5, result.score)}%` }}
                   ></div>
@@ -353,27 +358,18 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
             </div>
           </div>
 
+          <UrlAnatomyExplorer
+            url={result.normalizedUrl || result.originalUrl}
+            findings={result.findings}
+          />
+
           {/* Threat Intelligence Provider Grid */}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             {/* VirusTotal Provider */}
             <div className="soc-card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-white">VirusTotal v3</span>
-                <span
-                  className={`soc-badge ${
-                    result.providerResults?.virustotal?.status === "configured_active"
-                      ? result.providerResults?.virustotal?.detected
-                        ? "soc-badge-malicious"
-                        : "soc-badge-safe"
-                      : "soc-badge-neutral"
-                  }`}
-                >
-                  {result.providerResults?.virustotal?.status === "configured_active"
-                    ? result.providerResults?.virustotal?.detected
-                      ? "Flagged"
-                      : "Clean"
-                    : "Not Configured"}
-                </span>
+                <ProviderStatusBadge result={result.providerResults?.virustotal} />
               </div>
               <p className="text-xs text-soc-text font-medium">
                 {result.providerResults?.virustotal?.verdict || "No data"}
@@ -395,21 +391,11 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
             <div className="soc-card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-white">Google Safe Browsing</span>
-                <span
-                  className={`soc-badge ${
-                    result.providerResults?.safebrowsing?.status === "configured_active"
-                      ? result.providerResults?.safebrowsing?.detected
-                        ? "soc-badge-malicious"
-                        : "soc-badge-safe"
-                      : "soc-badge-neutral"
-                  }`}
-                >
-                  {result.providerResults?.safebrowsing?.status === "configured_active"
-                    ? result.providerResults?.safebrowsing?.detected
-                      ? "Threat Match"
-                      : "Clean"
-                    : "Not Configured"}
-                </span>
+                <ProviderStatusBadge
+                  result={result.providerResults?.safebrowsing}
+                  flaggedLabel="Threat match"
+                  negativeLabel="No matches"
+                />
               </div>
               <p className="text-xs text-soc-text font-medium">
                 {result.providerResults?.safebrowsing?.verdict || "No data"}
@@ -428,15 +414,11 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
             <div className="soc-card p-4 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-semibold text-white">URLhaus (abuse.ch)</span>
-                <span
-                  className={`soc-badge ${
-                    result.providerResults?.urlhaus?.detected
-                      ? "soc-badge-malicious"
-                      : "soc-badge-safe"
-                  }`}
-                >
-                  {result.providerResults?.urlhaus?.detected ? "Malware URL" : "Clean"}
-                </span>
+                <ProviderStatusBadge
+                  result={result.providerResults?.urlhaus}
+                  flaggedLabel="Malware URL"
+                  negativeLabel="No matches"
+                />
               </div>
               <p className="text-xs text-soc-text font-medium">
                 {result.providerResults?.urlhaus?.verdict || "No malware matches"}
@@ -462,7 +444,7 @@ Findings: ${result.findings.map((f) => `• ${f.title} (+${f.weight})`).join("\n
                 </h3>
               </div>
               <span className="text-xs text-soc-muted">
-                Explainable risk weight summation capped at 100
+                Unique finding weights are capped at 100; this score is not a probability.
               </span>
             </div>
 

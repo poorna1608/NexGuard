@@ -21,6 +21,7 @@ import {
   Cpu,
 } from "lucide-react";
 import { Finding, ProviderResult, DomainInfo, CertificateInfo, RedirectHop } from "@/lib/scanner/types";
+import { ProviderStatusBadge } from "@/components/ProviderStatusBadge";
 
 export const metadata = {
   title: "Scan Analysis Report – NexGuard SOC",
@@ -138,11 +139,13 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
             </span>
             <div
               className={`text-4xl font-extrabold my-1 ${
-                scan.score >= 65
+                isMalicious
                   ? "text-soc-rose"
                   : scan.score >= 25
                   ? "text-soc-amber"
-                  : "text-emerald-400"
+                  : isClean
+                  ? "text-soc-emerald"
+                  : "text-soc-muted"
               }`}
             >
               {scan.score}
@@ -151,11 +154,13 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
             <div className="h-2 w-28 overflow-hidden rounded-full bg-soc-card">
               <div
                 className={`h-full ${
-                  scan.score >= 65
+                  isMalicious
                     ? "bg-soc-rose"
                     : scan.score >= 25
                     ? "bg-soc-amber"
-                    : "bg-emerald-500"
+                    : isClean
+                    ? "bg-soc-emerald"
+                    : "bg-soc-muted"
                 }`}
                 style={{ width: `${Math.max(5, scan.score)}%` }}
               />
@@ -179,21 +184,7 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
           <div className="soc-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-xs text-white">VirusTotal v3</span>
-              <span
-                className={`soc-badge ${
-                  providerResults.virustotal?.status === "configured_active"
-                    ? providerResults.virustotal?.detected
-                      ? "soc-badge-malicious"
-                      : "soc-badge-safe"
-                    : "soc-badge-neutral"
-                }`}
-              >
-                {providerResults.virustotal?.status === "configured_active"
-                  ? providerResults.virustotal?.detected
-                    ? "Flagged"
-                    : "Clean"
-                  : "Not Configured"}
-              </span>
+              <ProviderStatusBadge result={providerResults.virustotal} />
             </div>
             <p className="text-xs text-soc-text font-medium">
               {providerResults.virustotal?.verdict || "Check not performed"}
@@ -212,21 +203,11 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
           <div className="soc-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-xs text-white">Google Safe Browsing</span>
-              <span
-                className={`soc-badge ${
-                  providerResults.safebrowsing?.status === "configured_active"
-                    ? providerResults.safebrowsing?.detected
-                      ? "soc-badge-malicious"
-                      : "soc-badge-safe"
-                    : "soc-badge-neutral"
-                }`}
-              >
-                {providerResults.safebrowsing?.status === "configured_active"
-                  ? providerResults.safebrowsing?.detected
-                    ? "Match"
-                    : "Clean"
-                  : "Not Configured"}
-              </span>
+              <ProviderStatusBadge
+                result={providerResults.safebrowsing}
+                flaggedLabel="Threat match"
+                negativeLabel="No matches"
+              />
             </div>
             <p className="text-xs text-soc-text font-medium">
               {providerResults.safebrowsing?.verdict || "Check not performed"}
@@ -240,13 +221,11 @@ export default async function ScanDetailsPage({ params }: { params: { id: string
           <div className="soc-card p-4 space-y-2">
             <div className="flex items-center justify-between">
               <span className="font-semibold text-xs text-white">URLhaus (abuse.ch)</span>
-              <span
-                className={`soc-badge ${
-                  providerResults.urlhaus?.detected ? "soc-badge-malicious" : "soc-badge-safe"
-                }`}
-              >
-                {providerResults.urlhaus?.detected ? "Malware" : "Clean"}
-              </span>
+              <ProviderStatusBadge
+                result={providerResults.urlhaus}
+                flaggedLabel="Malware"
+                negativeLabel="No matches"
+              />
             </div>
             <p className="text-xs text-soc-text font-medium">
               {providerResults.urlhaus?.verdict || "No active malware records"}

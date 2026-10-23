@@ -1,5 +1,20 @@
 import { ProviderResult } from "../types";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function providerError(verdict: string, errorMessage: string): ProviderResult {
+  return {
+    provider: "Google Safe Browsing",
+    status: "configured_error",
+    detected: false,
+    verdict,
+    errorMessage,
+    lastChecked: new Date().toISOString(),
+  };
+}
+
 /**
  * Google Safe Browsing Lookup API v4 Integration
  */
@@ -51,76 +66,72 @@ export async function checkGoogleSafeBrowsing(url: string): Promise<ProviderResu
       signal: controller.signal,
     });
 
-    clearTimeout(timeoutId);
-
     if (res.status === 200) {
-      const data = await res.json();
-      const matches = data?.matches || [];
-      const detected = matches.length > 0;
-
-      const threats: string[] = matches.map((m: any) => m.threatType);
-      let verdict = "Clean / No Threats Detected";
-      if (detected) {
-        verdict = `Threat Match: ${threats.join(", ")}`;
+      const data: unknown = await res.json();
+      if (!isRecord(data)) {
+        return providerError("Invalid Response", "Google Safe Browsing returned a malformed response.");
       }
+      const rawMatches = data.matches;
+      if (rawMatches !== undefined && !Array.isArray(rawMatches)) {
+        return providerError("Invalid Response", "Google Safe Browsing returned malformed matches.");
+      }
+
+      const matches = rawMatches ?? [];
+      const threats: string[] = [];
+      for (const match of matches) {
+        if (!isRecord(match) || typeof match.threatType !== "string") {
+          return providerError(
+            "Invalid Response",
+            "Google Safe Browsing returned a malformed threat match."
+          );
+        }
+        threats.push(match.threatType);
+      }
+      const detected = threats.length > 0;
 
       return {
         provider: "Google Safe Browsing",
         status: "configured_active",
         detected,
-        verdict,
+        verdict: detected
+          ? `Threat Match: ${threats.join(", ")}`
+          : "No threat matches reported",
         maliciousCount: detected ? 1 : 0,
-        details: {
-          threatTypes: threats,
-          matches,
-        },
+        details: { threatTypes: threats, matchCount: threats.length },
         lastChecked: new Date().toISOString(),
       };
     }
 
-    if (res.status === 400 || res.status === 403) {
-      return {
-        provider: "Google Safe Browsing",
-        status: "configured_error",
-        detected: false,
-        verdict: "Authentication Error",
-        errorMessage:
-          "Google Safe Browsing API returned 400/403. Check that the API key is active and has the Safe Browsing API enabled in Google Cloud Console.",
-        lastChecked: new Date().toISOString(),
-      };
+    if (res.status === 400 || res.status === 401 || res.status === 403) {
+      return providerError(
+        "Authentication Error",
+        `Google Safe Browsing returned HTTP ${res.status}. Check that the API key is valid and the API is enabled.`
+      );
     }
 
     if (res.status === 429) {
-      return {
-        provider: "Google Safe Browsing",
-        status: "configured_error",
-        detected: false,
-        verdict: "Rate Limit Exceeded",
-        errorMessage: "Google Safe Browsing quota exceeded (429 Too Many Requests).",
-        lastChecked: new Date().toISOString(),
-      };
+      return providerError(
+        "Rate Limit Exceeded",
+        "Google Safe Browsing quota exceeded (429 Too Many Requests)."
+      );
     }
 
-    return {
-      provider: "Google Safe Browsing",
-      status: "configured_error",
-      detected: false,
-      verdict: "Service Error",
-      errorMessage: `Google Safe Browsing returned HTTP status ${res.status}.`,
-      lastChecked: new Date().toISOString(),
-    };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    const isTimeout = err.name === "AbortError";
-    return {
-      provider: "Google Safe Browsing",
-      status: "configured_error",
-      detected: false,
-      verdict: isTimeout ? "Timeout" : "Connection Error",
-      errorMessage: isTimeout
+    return providerError(
+      "Service Error",
+      `Google Safe Browsing returned HTTP status ${res.status}.`
+    );
+  } catch (err: unknown) {
+    if (err instanceof SyntaxError) {
+      return providerError("Invalid Response", "Google Safe Browsing returned invalid JSON.");
+    }
+    const isTimeout = err instanceof Error && err.name === "AbortError";
+    return providerError(
+      isTimeout ? "Timeout" : "Connection Error",
+      isTimeout
         ? "Google Safe Browsing request timed out after 5 seconds."
-        : `Connection error: ${err.message || String(err)}`,
-      lastChecked: new Date().toISOString(),
-    };
+        : "Could not connect to Google Safe Browsing."
+    );
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

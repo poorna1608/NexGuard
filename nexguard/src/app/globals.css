@@ -3,12 +3,37 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+  --soc-dark: 248 250 252;
+  --soc-card: 255 255 255;
+  --soc-card-hover: 241 245 249;
+  --soc-border: 203 213 225;
+  --soc-border-light: 148 163 184;
+  --soc-accent: 2 132 199;
+  --soc-accent-glow: 14 165 233;
+  --soc-blue: 37 99 235;
+  --soc-blue-dark: 29 78 216;
+  --soc-emerald: 5 150 105;
+  --soc-amber: 180 83 9;
+  --soc-rose: 185 28 28;
+  --soc-text: 23 32 51;
+  --soc-muted: 71 85 105;
+}
+
+html.dark {
+  color-scheme: dark;
+  --soc-dark: 11 15 25;
+  --soc-card: 17 24 39;
+  --soc-card-hover: 31 41 55;
+  --soc-border: 30 41 59;
+  --soc-border-light: 51 65 85;
+  --soc-text: 241 245 249;
+  --soc-muted: 148 163 184;
 }
 
 body {
   background-color: #F8FAFC;
-  color: #0F172A;
+  color: #172033;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   min-height: 100vh;
 }
@@ -16,6 +41,74 @@ body {
 .dark body {
   background-color: #0B0F19;
   color: #F1F5F9;
+}
+
+html:not(.dark) .text-white:not(button):not(svg):not(.soc-btn-primary):not(.soc-badge) {
+  color: #172033;
+}
+
+html:not(.dark) .text-slate-300,
+html:not(.dark) .text-slate-400,
+html:not(.dark) .text-gray-300,
+html:not(.dark) .text-gray-400 {
+  color: #475569;
+}
+
+html:not(.dark) .text-emerald-300,
+html:not(.dark) .text-emerald-400,
+html:not(.dark) .text-green-300,
+html:not(.dark) .text-green-400 {
+  color: #047857;
+}
+
+html:not(.dark) .text-amber-300,
+html:not(.dark) .text-amber-400,
+html:not(.dark) .text-yellow-300,
+html:not(.dark) .text-yellow-400 {
+  color: #92400E;
+}
+
+html:not(.dark) .text-red-300,
+html:not(.dark) .text-red-400,
+html:not(.dark) .text-rose-300,
+html:not(.dark) .text-rose-400 {
+  color: #B91C1C;
+}
+
+html:not(.dark) .text-sky-300,
+html:not(.dark) .text-sky-400,
+html:not(.dark) .text-blue-300,
+html:not(.dark) .text-blue-400,
+html:not(.dark) .text-cyan-300,
+html:not(.dark) .text-cyan-400 {
+  color: #1D4ED8;
+}
+
+html:not(.dark) .text-purple-300,
+html:not(.dark) .text-purple-400,
+html:not(.dark) .text-indigo-300,
+html:not(.dark) .text-indigo-400 {
+  color: #6B21A8;
+}
+
+html:not(.dark) [class~="text-[10px]"] {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+html:not(.dark) [class~="text-[11px]"] {
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+html:not(.dark) .soc-input::placeholder {
+  color: #64748B;
+  opacity: 1;
+}
+
+:focus-visible {
+  outline: 3px solid #0284C7;
+  outline-offset: 2px;
 }
 
 /* Custom scrollbar */
@@ -47,7 +140,7 @@ body {
 }
 
 .soc-input {
-  @apply w-full rounded-lg border border-slate-300 bg-white py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition-colors dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-sky-400;
+  @apply w-full rounded-lg border border-slate-300 bg-white py-2.5 text-sm text-slate-900 placeholder:text-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition-colors dark:border-slate-700 dark:bg-slate-950 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-sky-400;
 }
 
 .soc-btn-primary {

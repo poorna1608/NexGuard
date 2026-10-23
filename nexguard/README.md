@@ -26,6 +26,22 @@ The platform implements 16 functional modules:
 14. **User Profile (`/profile`)**: User information, personal scan statistics, name updates, and password changes.
 15. **Settings (`/settings`)**: Live threat intelligence provider status diagnostics, SSRF sandboxing controls, and database purge options.
 16. **Help and Support (`/help`)**: Step-by-step scanning guide, scoring rules, API credential setup guide, and FAQs.
+17. **Security Assistant (`/assistant`)**: Defensive cybersecurity chat with a built-in attack explainer; optionally uses OpenAI when configured.
+
+The scanner result also includes a URL anatomy view. It displays query parameter names but never their values, and labels the last-two-label domain split as approximate because it does not resolve public-suffix exceptions.
+
+The scanner accepts HTTP and HTTPS URLs, bare hostnames or domains, IPv4/IPv6 addresses, ports, paths, and shortened URLs. If a scheme is omitted, HTTPS is assumed. Non-web protocols such as `ftp:` are reported as unsupported. Threat reputation checks cannot guarantee that an unreported or newly created URL is safe.
+
+The Security Assistant works in guided mode without an AI key. To enable generative AI responses, configure `OPENAI_API_KEY` (and optionally `OPENAI_MODEL`) in the server-side `.env` file. In AI mode, conversation messages are sent to OpenAI; do not submit passwords, API keys, or private information. The key is never exposed to the browser.
+
+Signed-in users' Security Assistant conversations and messages are saved in the same local SQLite database as scan history. Guests can use the assistant, but their chats are not saved. Users can reopen or delete their saved conversations. Before enabling chat history in an existing installation, stop the app, make a database backup, and apply the additive, non-destructive SQL migration from this folder:
+
+```powershell
+Copy-Item .\prisma\dev.db .\prisma\dev.db.before-chat-history.bak
+npm run db:chat-history
+```
+
+The migration adds only `ChatConversation` and `ChatMessage` tables and their indexes; it does not modify or delete accounts or scan records. `DATABASE_URL` must point to the existing SQLite database.
 
 ---
 
@@ -44,14 +60,14 @@ The platform implements 16 functional modules:
 - **VirusTotal v3 (`checkVirusTotal`):**
   - Reads `VIRUSTOTAL_API_KEY` strictly server-side.
   - Computes URL-safe base64 without padding (`base64url`).
-  - Queries `https://www.virustotal.com/api/v3/urls/{id}` to fetch aggregated verdicts from 70+ antivirus engines.
-  - Automatically submits unknown URLs for fresh analysis if not yet cached (`POST /api/v3/urls`).
-  - Handles 401/403 (unauthorized), 429 (rate limits), timeouts, and network errors gracefully.
+  - Queries `https://www.virustotal.com/api/v3/urls/{id}` and displays the returned engine statistics and findings.
+  - Submits URLs missing from its report index (`POST /api/v3/urls`), checks the analysis status once, and marks unfinished analysis **pending**; a later scan is needed to retrieve completed results.
+  - Distinguishes pending, malformed responses, invalid credentials, rate limits, timeouts, and network failures. None are reported as clean results.
 - **Google Safe Browsing v4 (`checkGoogleSafeBrowsing`):**
   - Queries the Lookup API for `MALWARE`, `SOCIAL_ENGINEERING`, `UNWANTED_SOFTWARE`, and `POTENTIALLY_HARMFUL_APPLICATION`.
 - **URLhaus by abuse.ch (`checkUrlhaus`):**
   - Queries real-time malware distribution feeds and payload tags maintained by abuse.ch.
-  - Available out of the box without requiring paid credentials.
+  - Requires `URLHAUS_AUTH_KEY`; missing or rejected credentials are reported rather than treated as a negative result.
 
 ### C. Network & Cryptographic Forensics
 - **Authoritative DNS:** Resolves A, AAAA, MX, TXT, and NS records via Node.js `dns/promises`.
@@ -66,11 +82,13 @@ The platform implements 16 functional modules:
 
 | Risk Classification | Score Range | Color Code | Description |
 | :--- | :--- | :--- | :--- |
-| **`MALICIOUS`** | **65 – 100** | Red (`#EF4444`) | Strong evidence: VirusTotal vendor hits, Google Safe Browsing match, URLhaus malware payload, or critical brand phishing. |
-| **`SUSPICIOUS`** | **25 – 64** | Amber (`#F59E0B`) | Deceptive traits: Typosquatting, raw IP, high-risk TLD, expired certificate, or heavy obfuscation. |
-| **`NO THREAT DETECTED`** | **0 – 24** | Green (`#10B981`) | No negative indicators or threat-feed matches found by active engines. |
-| **`SCAN INCOMPLETE`** | **0** | Purple (`#8B5CF6`) | Unresolvable domain or insufficient connectivity. |
+| **`MALICIOUS`** | Provider-confirmed | Red (`#EF4444`) | A supported threat-intelligence provider matched the URL; the report identifies the provider and evidence. |
+| **`SUSPICIOUS`** | **25 – 100** | Amber (`#F59E0B`) | Risk indicators were found. Heuristics alone do not confirm malicious intent. |
+| **`NO THREAT DETECTED`** | **0 – 24** | Green (`#10B981`) | No indicators were reported by completed checks. This is not a safety guarantee. |
+| **`SCAN INCOMPLETE`** | **0 – 24** | Purple (`#8B5CF6`) | No threat verdict is available because all usable threat-intelligence checks are unavailable, pending, or failed. |
 | **`INVALID URL`** | **0** | Slate (`#64748B`) | Malformed syntax or non-HTTP/HTTPS protocol. |
+
+The score adds the weights of unique findings and is capped at 100. It is not a probability. A confirmed threat-intelligence match can raise the score to at least 85. Unavailable or pending provider checks are shown separately and make a scan partial.
 
 *Detailed color code reference is saved in [`docs/COLOR_CODES.md`](docs/COLOR_CODES.md).*
 
@@ -78,47 +96,78 @@ The platform implements 16 functional modules:
 
 ## 4. Environment Configuration
 
-Copy `.env.example` to `.env`:
+If `.env` does not already exist, copy `.env.example` to `.env` and replace the authentication-secret placeholder with a unique random value:
 
 ```env
 DATABASE_URL="file:./dev.db"
-AUTH_SECRET="nexguard-super-secret-jwt-key-minimum-32-chars-long-secure"
+AUTH_SECRET="replace-with-a-unique-random-secret-of-at-least-32-characters"
 
 # External Threat Intelligence API Keys (Optional but recommended)
 VIRUSTOTAL_API_KEY=""
 GOOGLE_SAFE_BROWSING_API_KEY=""
-URLHAUS_AUTH_KEY=""
+URLHAUS_AUTH_KEY="your_urlhaus_auth_key"
+OPENAI_API_KEY=""
+OPENAI_MODEL="gpt-4o-mini"
 
 NEXT_PUBLIC_APP_URL="http://localhost:3000"
 ```
 
 - **VirusTotal API Key:** Get a free key at [virustotal.com/gui/my-apikey](https://www.virustotal.com/gui/my-apikey).
 - **Google Safe Browsing Key:** Enable Safe Browsing APIs in [Google Cloud Console](https://console.cloud.google.com/).
+- **OpenAI API Key (optional):** Configure an API key to enable generative replies in the Security Assistant. Without a key, the built-in guided attack explainer remains available.
 
 ---
 
 ## 5. Local Setup and Execution
 
-Run in PowerShell:
+Use Node.js 18.17 or later (Node.js 20 LTS recommended). Run in PowerShell from the project folder:
 
 ```powershell
-# 1. Install dependencies
+Set-Location C:\Users\apoor\Downloads\nexguard\nexguard
 npm install
 
-# 2. Push Prisma database schema to SQLite
-npx prisma db push
+# Optional first-time setup only: create .env if it does not exist.
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
 
-# 3. Run unit and heuristic test suite (21 tests)
+# Tests, typecheck, and production build
 npm test
-
-# 4. Typecheck
 npm run typecheck
-
-# 5. Build production bundle
 npm run build
+```
 
-# 6. Start development server
+The existing SQLite database is `prisma\dev.db`. The schema is already provided; **do not run `npx prisma db push` or `npm run db:push` as a setup step** because schema changes can alter an existing database. Keep the current database and environment file when updating the app.
+
+Start locally for development:
+
+```powershell
+Set-Location C:\Users\apoor\Downloads\nexguard\nexguard
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+For a production-mode local run:
+
+```powershell
+Set-Location C:\Users\apoor\Downloads\nexguard\nexguard
+npm run build
+npm run start
+```
+
+Open [http://localhost:3000](http://localhost:3000) in your browser. Press `Ctrl+C` in the PowerShell window to stop the server. External threat-intelligence queries require internet access; VirusTotal and Google Safe Browsing also require valid server-side keys.
+
+### Local database backup and restore
+
+Back up SQLite using its online backup API (Python 3 is required). This command refuses to overwrite a previous backup:
+
+```powershell
+Set-Location C:\Users\apoor\Downloads\nexguard\nexguard
+if (Test-Path .\prisma\dev.db.backup) { throw 'Backup already exists; move it aside before creating another.' }
+python -c "import pathlib,sqlite3; p=pathlib.Path(r'.\prisma\dev.db').resolve(); s=sqlite3.connect(p.as_uri()+'?mode=ro',uri=True); d=sqlite3.connect(r'.\prisma\dev.db.backup'); s.backup(d); d.close(); s.close()"
+```
+
+To restore, stop NexGuard, first back up the current `prisma\dev.db`, then copy the saved database into place:
+
+```powershell
+Copy-Item .\prisma\dev.db .\prisma\dev.db.before-restore
+Copy-Item .\prisma\dev.db.backup .\prisma\dev.db
+```

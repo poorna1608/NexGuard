@@ -189,7 +189,7 @@ export function runHeuristicAnalysis(input: string): HeuristicAnalysis {
 
   let u: URL;
   try {
-    const hasScheme = /^[a-z][a-z0-9+.-]*:/i.test(raw);
+    const hasScheme = /^[a-z][a-z0-9+.-]*:(?!\d+(?:[/?#]|$))/i.test(raw);
     const toParse = hasScheme ? raw : `https://${raw}`;
     u = new URL(toParse);
   } catch (err: any) {

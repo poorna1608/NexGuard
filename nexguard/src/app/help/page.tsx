@@ -36,7 +36,7 @@ export default function HelpPage() {
     },
     {
       q: "What does 'NO THREAT DETECTED' mean?",
-      a: "It means that none of the active threat intelligence engines or heuristic indicators flagged malicious traits on the target. However, threat actors deploy brand-new domains daily that may not yet appear on public blocklists. Always exercise caution before submitting private credentials.",
+      a: "Completed checks reported no known indicators. Pending, unavailable, or failed providers are shown separately and make the scan partial. This result is not a safety guarantee; newly created threats may not yet appear in public feeds.",
     },
   ];
 
@@ -93,20 +93,20 @@ export default function HelpPage() {
           <div className="rounded border border-soc-rose/30 bg-soc-rose/5 p-3.5 space-y-1">
             <div className="flex items-center gap-2 text-soc-rose font-bold">
               <span className="h-2 w-2 rounded-full bg-soc-rose"></span>
-              MALICIOUS (Risk Score 65–100 / 100)
+              MALICIOUS (Provider-confirmed)
             </div>
             <p className="text-soc-text leading-relaxed">
-              Target matches verified threat intelligence feeds (VirusTotal engines, Google Safe Browsing, or URLhaus malware distribution) or critical brand-spoofing phishing indicators. Do NOT click or enter credentials.
+              A supported threat-intelligence provider returned a threat match. Review the provider and evidence shown in the report. Do NOT click or enter credentials.
             </p>
           </div>
 
           <div className="rounded border border-soc-amber/30 bg-soc-amber/5 p-3.5 space-y-1">
             <div className="flex items-center gap-2 text-soc-amber font-bold">
               <span className="h-2 w-2 rounded-full bg-soc-amber"></span>
-              SUSPICIOUS (Risk Score 25–64 / 100)
+              SUSPICIOUS (Risk Score 25–100 / 100)
             </div>
             <p className="text-soc-text leading-relaxed">
-              Target exhibits anomalous structural characteristics (e.g. brand typosquatting, raw IP host, non-standard web ports, newly registered domain, or high-risk TLD). Verify sender through an independent trusted channel.
+              The URL has one or more structural or reputation indicators. Even a high heuristic score is not provider confirmation; verify the sender through an independent trusted channel.
             </p>
           </div>
 
@@ -116,7 +116,7 @@ export default function HelpPage() {
               NO THREAT DETECTED (Risk Score 0–24 / 100)
             </div>
             <p className="text-soc-text leading-relaxed">
-              Active checks and heuristic engines did not identify malicious indicators. Remember that zero detections does not guarantee absolute safety for brand-new domains.
+              Completed checks did not report known indicators. A partial scan or zero detections does not guarantee safety, especially for new domains.
             </p>
           </div>
         </div>

@@ -285,7 +285,7 @@ export async function scanUrlAsync(
   let classification: Classification = "NO THREAT DETECTED";
   let scanStatus: "completed" | "partial" | "failed" = "completed";
 
-  if (hasConfirmedThreat || finalScore >= 65) {
+  if (hasConfirmedThreat) {
     classification = "MALICIOUS";
   } else if (finalScore >= 25) {
     classification = "SUSPICIOUS";
@@ -297,11 +297,19 @@ export async function scanUrlAsync(
   const activeProviders = Object.values(providerResults).filter(
     (p) => p.status === "configured_active"
   );
-  if (activeProviders.length === 0) {
+  const incompleteProviders = Object.values(providerResults).some(
+    (p) =>
+      p.status === "configured_pending" ||
+      p.status === "configured_error"
+  );
+  if (activeProviders.length === 0 || incompleteProviders) {
     notes.push(
-      "External threat-intelligence keys are not configured. Classification relies on heuristic analysis and network telemetry."
+      "One or more threat-intelligence checks did not return a completed result. Review provider statuses; a low score is not a safety verdict."
     );
     scanStatus = "partial";
+  }
+  if (scanStatus === "partial" && finalScore < 25 && !hasConfirmedThreat) {
+    classification = "SCAN INCOMPLETE";
   }
 
   // 7. Summary & Recommendations Generation
@@ -320,6 +328,12 @@ export async function scanUrlAsync(
       "Inspect the browser address bar carefully to ensure the domain matches the expected institution.",
       "Do not download files or grant browser permissions requested by this destination."
     );
+  } else if (classification === "SCAN INCOMPLETE") {
+    summary = `Inconclusive scan (Risk score ${finalScore}/100). No threat verdict is available because threat-intelligence checks did not complete.`;
+    recommendations.push(
+      "Review provider errors and pending checks, then retry when those services are available.",
+      "Do not treat this result as evidence that the URL is safe."
+    );
   } else {
     summary = `No known threat indicators detected by active security engines and heuristic rules (Risk score ${finalScore}/100).`;
     recommendations.push(
@@ -329,7 +343,7 @@ export async function scanUrlAsync(
   }
 
   notes.push(
-    "Score is an explainable weighted heuristic and intelligence aggregation, not a probabilistic guarantee.",
+    "The score is the sum of unique finding weights, capped at 100; it is not a probability. Heuristic findings alone do not confirm malicious intent.",
     "HTTPS encryption protects data in transit, but phishing sites routinely use valid SSL/TLS certificates."
   );
 

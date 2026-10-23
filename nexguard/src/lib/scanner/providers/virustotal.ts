@@ -1,5 +1,164 @@
 import { ProviderResult } from "../types";
 
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function providerError(verdict: string, errorMessage: string): ProviderResult {
+  return {
+    provider: "VirusTotal v3",
+    status: "configured_error",
+    detected: false,
+    verdict,
+    errorMessage,
+    lastChecked: new Date().toISOString(),
+  };
+}
+
+function httpError(status: number): ProviderResult {
+  if (status === 401 || status === 403) {
+    return providerError(
+      "Authentication Error",
+      "VirusTotal rejected the API key (401/403). Verify that VIRUSTOTAL_API_KEY is valid."
+    );
+  }
+
+  if (status === 429) {
+    return providerError(
+      "Rate Limit Exceeded",
+      "VirusTotal API rate limit or monthly quota was exceeded (429 Too Many Requests)."
+    );
+  }
+
+  return providerError(
+    "Service Error",
+    `VirusTotal returned unexpected HTTP status ${status}.`
+  );
+}
+
+function pendingResult(
+  analysisId?: string,
+  analysisStatus?: string,
+  errorMessage?: string
+): ProviderResult {
+  return {
+    provider: "VirusTotal v3",
+    status: "configured_pending",
+    detected: false,
+    verdict: "Analysis Pending",
+    details: {
+      ...(analysisId ? { submissionId: analysisId } : {}),
+      ...(analysisStatus ? { analysisStatus } : {}),
+      note: "VirusTotal has not completed analysis. Rescan later to retrieve a report; this is not a clean result.",
+    },
+    ...(errorMessage ? { errorMessage } : {}),
+    lastChecked: new Date().toISOString(),
+  };
+}
+
+function parseReport(data: unknown): ProviderResult {
+  if (!isRecord(data) || !isRecord(data.data) || !isRecord(data.data.attributes)) {
+    return providerError("Invalid Response", "VirusTotal returned a malformed URL report.");
+  }
+
+  const attrs = data.data.attributes;
+  const stats = attrs.last_analysis_stats;
+  if (!isRecord(stats)) {
+    return pendingResult();
+  }
+
+  const statEntries = Object.entries(stats);
+  if (statEntries.length === 0) {
+    return pendingResult();
+  }
+  if (
+    statEntries.some(
+      ([, value]) =>
+        typeof value !== "number" || !Number.isSafeInteger(value) || value < 0
+    )
+  ) {
+    return providerError(
+      "Invalid Response",
+      "VirusTotal returned malformed analysis statistics."
+    );
+  }
+
+  const count = (name: string): number => {
+    const value = stats[name];
+    return typeof value === "number" ? value : 0;
+  };
+  const malicious = count("malicious");
+  const suspicious = count("suspicious");
+  const harmless = count("harmless");
+  const undetected = count("undetected");
+  const total = statEntries.reduce(
+    (sum, [, value]) => sum + (typeof value === "number" ? value : 0),
+    0
+  );
+
+  if (total === 0) {
+    return pendingResult();
+  }
+  if (
+    typeof attrs.last_analysis_date === "number" &&
+    !Number.isFinite(new Date(attrs.last_analysis_date * 1000).getTime())
+  ) {
+    return providerError(
+      "Invalid Response",
+      "VirusTotal returned an invalid analysis timestamp."
+    );
+  }
+
+  const flaggedEngines: string[] = [];
+  const results = attrs.last_analysis_results;
+  if (isRecord(results)) {
+    for (const [engine, value] of Object.entries(results)) {
+      if (
+        isRecord(value) &&
+        (value.category === "malicious" || value.category === "suspicious")
+      ) {
+        const result =
+          typeof value.result === "string" ? value.result : value.category;
+        flaggedEngines.push(`${engine} (${result})`);
+      }
+    }
+  }
+
+  const detected = malicious > 0 || suspicious > 0;
+  const verdict = malicious > 0
+    ? `Malicious (${malicious} engines)`
+    : suspicious > 0
+      ? `Suspicious (${suspicious} engines)`
+      : "No malicious or suspicious detections reported";
+  const lastAnalysisDate =
+    typeof attrs.last_analysis_date === "number"
+      ? new Date(attrs.last_analysis_date * 1000).toISOString()
+      : null;
+
+  return {
+    provider: "VirusTotal v3",
+    status: "configured_active",
+    detected,
+    verdict,
+    maliciousCount: malicious,
+    suspiciousCount: suspicious,
+    harmlessCount: harmless,
+    totalEngines: total,
+    details: {
+      ...(typeof attrs.reputation === "number"
+        ? { reputation: attrs.reputation }
+        : {}),
+      ...(isRecord(attrs.categories) ? { categories: attrs.categories } : {}),
+      ...(Array.isArray(attrs.tags) ? { tags: attrs.tags } : {}),
+      flaggedEngines: flaggedEngines.slice(0, 15),
+      lastAnalysisDate,
+    },
+    lastChecked: new Date().toISOString(),
+  };
+}
+
 /**
  * VirusTotal API v3 Integration
  *
@@ -13,7 +172,6 @@ import { ProviderResult } from "../types";
 export async function checkVirusTotal(url: string): Promise<ProviderResult> {
   const apiKey = process.env.VIRUSTOTAL_API_KEY?.trim();
 
-  // If no API key configured
   if (!apiKey) {
     return {
       provider: "VirusTotal v3",
@@ -21,7 +179,7 @@ export async function checkVirusTotal(url: string): Promise<ProviderResult> {
       detected: false,
       verdict: "Not Configured",
       errorMessage:
-        "VIRUSTOTAL_API_KEY is not set in environment. Add your key to .env to enable 70+ antivirus engine lookups.",
+        "VIRUSTOTAL_API_KEY is not set in the environment. Add it to the server-side .env file to enable VirusTotal lookups.",
       lastChecked: new Date().toISOString(),
     };
   }
@@ -43,113 +201,30 @@ export async function checkVirusTotal(url: string): Promise<ProviderResult> {
       signal: controller.signal,
     });
 
-    clearTimeout(timeoutId);
-
-    // 1. URL Report Found
     if (res.status === 200) {
-      const data = await res.json();
-      const attrs = data?.data?.attributes;
-      const stats = attrs?.last_analysis_stats || {
-        malicious: 0,
-        suspicious: 0,
-        harmless: 0,
-        undetected: 0,
-      };
-
-      const malicious = Number(stats.malicious || 0);
-      const suspicious = Number(stats.suspicious || 0);
-      const harmless = Number(stats.harmless || 0);
-      const undetected = Number(stats.undetected || 0);
-      const total = malicious + suspicious + harmless + undetected;
-
-      const results = attrs?.last_analysis_results || {};
-      const flaggedEngines: string[] = [];
-      for (const [engine, val] of Object.entries<any>(results)) {
-        if (val.category === "malicious" || val.category === "suspicious") {
-          flaggedEngines.push(`${engine} (${val.result || val.category})`);
-        }
-      }
-
-      const detected = malicious > 0 || suspicious > 1;
-      let verdict = "Clean / Harmless";
-      if (malicious > 0) verdict = `Malicious (${malicious} engines)`;
-      else if (suspicious > 0) verdict = `Suspicious (${suspicious} engines)`;
-
-      return {
-        provider: "VirusTotal v3",
-        status: "configured_active",
-        detected,
-        verdict,
-        maliciousCount: malicious,
-        suspiciousCount: suspicious,
-        harmlessCount: harmless,
-        totalEngines: total,
-        details: {
-          reputation: attrs?.reputation ?? 0,
-          categories: attrs?.categories ?? {},
-          tags: attrs?.tags ?? [],
-          flaggedEngines: flaggedEngines.slice(0, 15),
-          lastAnalysisDate: attrs?.last_analysis_date
-            ? new Date(attrs.last_analysis_date * 1000).toISOString()
-            : null,
-        },
-        lastChecked: new Date().toISOString(),
-      };
+      return parseReport(await res.json());
     }
 
-    // 2. URL not yet analyzed in VirusTotal database -> Submit for asynchronous scan
     if (res.status === 404) {
       return await submitVirusTotalUrl(url, apiKey);
     }
 
-    // 3. Unauthorized / Invalid API Key
-    if (res.status === 401 || res.status === 403) {
-      return {
-        provider: "VirusTotal v3",
-        status: "configured_error",
-        detected: false,
-        verdict: "Authentication Error",
-        errorMessage:
-          "VirusTotal rejected the API key (401/403 Unauthorized). Please verify that your VIRUSTOTAL_API_KEY in .env is valid.",
-        lastChecked: new Date().toISOString(),
-      };
+    return httpError(res.status);
+  } catch (err: unknown) {
+    if (err instanceof SyntaxError) {
+      return providerError("Invalid Response", "VirusTotal returned invalid JSON.");
     }
-
-    // 4. Rate Limit / Quota Exceeded
-    if (res.status === 429) {
-      return {
-        provider: "VirusTotal v3",
-        status: "configured_error",
-        detected: false,
-        verdict: "Rate Limit Exceeded",
-        errorMessage:
-          "VirusTotal API rate limit or monthly quota exceeded (429 Too Many Requests). The scanner will continue using heuristic engines and other providers.",
-        lastChecked: new Date().toISOString(),
-      };
-    }
-
-    // 5. Unexpected status
-    return {
-      provider: "VirusTotal v3",
-      status: "configured_error",
-      detected: false,
-      verdict: "Service Error",
-      errorMessage: `VirusTotal returned unexpected HTTP status ${res.status}.`,
-      lastChecked: new Date().toISOString(),
-    };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    const isTimeout = err.name === "AbortError";
-    return {
-      provider: "VirusTotal v3",
-      status: "configured_error",
-      detected: false,
-      verdict: isTimeout ? "Timeout" : "Connection Error",
-      errorMessage: isTimeout
+    const isTimeout = err instanceof Error && err.name === "AbortError";
+    return providerError(
+      isTimeout ? "Timeout" : "Connection Error",
+      isTimeout
         ? "VirusTotal request timed out after 6 seconds."
-        : `Could not connect to VirusTotal API: ${err.message || String(err)}`,
-      lastChecked: new Date().toISOString(),
-    };
+        : `Could not connect to VirusTotal API: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+    );
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
@@ -172,42 +247,136 @@ async function submitVirusTotalUrl(url: string, apiKey: string): Promise<Provide
       signal: submitController.signal,
     });
 
-    clearTimeout(submitTimeout);
+    if (!res.ok) {
+      return httpError(res.status);
+    }
 
-    if (res.ok) {
-      const data = await res.json();
-      const analysisId = data?.data?.id;
+    const data: unknown = await res.json();
+    if (
+      !isRecord(data) ||
+      !isRecord(data.data) ||
+      typeof data.data.id !== "string" ||
+      data.data.id.length === 0
+    ) {
+      return providerError(
+        "Invalid Response",
+        "VirusTotal accepted the submission but returned no analysis ID."
+      );
+    }
+
+    return await pollAnalysisStatus(data.data.id, urlIdFor(url), apiKey);
+  } catch (err: unknown) {
+    if (err instanceof SyntaxError) {
+      return providerError("Invalid Response", "VirusTotal returned invalid JSON.");
+    }
+    const isTimeout = err instanceof Error && err.name === "AbortError";
+    return providerError(
+      isTimeout ? "Timeout" : "Connection Error",
+      isTimeout
+        ? "VirusTotal submission timed out after 5 seconds."
+        : `Could not submit the URL to VirusTotal: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+    );
+  } finally {
+    clearTimeout(submitTimeout);
+  }
+}
+
+function urlIdFor(url: string): string {
+  return Buffer.from(url).toString("base64url");
+}
+
+async function pollAnalysisStatus(
+  analysisId: string,
+  urlId: string,
+  apiKey: string
+): Promise<ProviderResult> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+  try {
+    const response = await fetch(
+      `https://www.virustotal.com/api/v3/analyses/${encodeURIComponent(analysisId)}`,
+      {
+        headers: { "x-apikey": apiKey, Accept: "application/json" },
+        signal: controller.signal,
+      }
+    );
+
+    if (!response.ok) {
+      const failure = httpError(response.status);
       return {
-        provider: "VirusTotal v3",
-        status: "configured_active",
-        detected: false,
-        verdict: "Submitted for Analysis",
-        details: {
-          submissionId: analysisId,
-          note: "URL was not previously indexed in VirusTotal. It has been submitted for fresh multi-engine analysis.",
-        },
-        lastChecked: new Date().toISOString(),
+        ...failure,
+        details: { submissionId: analysisId },
       };
     }
 
-    return {
-      provider: "VirusTotal v3",
-      status: "configured_active",
-      detected: false,
-      verdict: "Not Indexed",
-      details: {
-        note: "URL is not currently indexed in VirusTotal's public repository.",
-      },
-      lastChecked: new Date().toISOString(),
-    };
-  } catch (err: any) {
-    clearTimeout(submitTimeout);
-    return {
-      provider: "VirusTotal v3",
-      status: "configured_active",
-      detected: false,
-      verdict: "Not Indexed",
-      lastChecked: new Date().toISOString(),
-    };
+    const data: unknown = await response.json();
+    if (
+      !isRecord(data) ||
+      !isRecord(data.data) ||
+      !isRecord(data.data.attributes) ||
+      typeof data.data.attributes.status !== "string"
+    ) {
+      return providerError(
+        "Invalid Response",
+        "VirusTotal returned a malformed analysis status."
+      );
+    }
+
+    const analysisStatus = data.data.attributes.status;
+    if (analysisStatus !== "completed") {
+      return pendingResult(analysisId, analysisStatus);
+    }
+
+    const reportController = new AbortController();
+    const reportTimeout = setTimeout(() => reportController.abort(), 3000);
+    try {
+      const report = await fetch(
+        `https://www.virustotal.com/api/v3/urls/${urlId}`,
+        {
+          headers: { "x-apikey": apiKey, Accept: "application/json" },
+          signal: reportController.signal,
+        }
+      );
+      if (report.status === 200) {
+        const result = parseReport(await report.json());
+        return result.status === "configured_pending"
+          ? pendingResult(
+              analysisId,
+              analysisStatus,
+              "The analysis completed, but its URL report is not available yet. Rescan later."
+            )
+          : result;
+      }
+      if (report.status === 404) {
+        return pendingResult(
+          analysisId,
+          analysisStatus,
+          "The analysis completed, but its URL report is not indexed yet. Rescan later."
+        );
+      }
+      return httpError(report.status);
+    } finally {
+      clearTimeout(reportTimeout);
+    }
+  } catch (err: unknown) {
+    if (err instanceof SyntaxError) {
+      return providerError(
+        "Invalid Response",
+        "VirusTotal returned invalid analysis-status JSON."
+      );
+    }
+    const isTimeout = err instanceof Error && err.name === "AbortError";
+    return pendingResult(
+      analysisId,
+      undefined,
+      isTimeout
+        ? "VirusTotal accepted the URL, but the analysis status check timed out. Rescan later."
+        : "VirusTotal accepted the URL, but its analysis status could not be retrieved. Rescan later."
+    );
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

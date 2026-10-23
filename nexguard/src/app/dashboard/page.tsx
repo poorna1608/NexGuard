@@ -16,6 +16,7 @@ import {
   Layers,
   Cpu,
   BarChart2,
+  MessageCircle,
 } from "lucide-react";
 
 export const metadata = {
@@ -38,6 +39,14 @@ export default async function DashboardPage() {
       where: { userId: user.id },
       orderBy: { createdAt: "desc" },
       take: 8,
+      select: {
+        id: true,
+        originalUrl: true,
+        score: true,
+        classification: true,
+        findings: true,
+        createdAt: true,
+      },
     }),
   ]);
 
@@ -54,34 +63,65 @@ export default async function DashboardPage() {
   const suspiciousCount = getCount("SUSPICIOUS");
   const cleanCount = getCount("NO THREAT DETECTED");
   const incompleteCount = getCount("SCAN INCOMPLETE");
+  const invalidCount = getCount("INVALID URL");
+  const otherCount = Math.max(
+    0,
+    totalScans -
+      maliciousCount -
+      suspiciousCount -
+      cleanCount -
+      incompleteCount -
+      invalidCount
+  );
 
-  // Calculate percentages
-  const safePercent = totalScans > 0 ? Math.round((cleanCount / totalScans) * 100) : 0;
-  const suspiciousPercent = totalScans > 0 ? Math.round((suspiciousCount / totalScans) * 100) : 0;
-  const maliciousPercent = totalScans > 0 ? Math.round((maliciousCount / totalScans) * 100) : 0;
-  const incompletePercent = totalScans > 0 ? Math.round((incompleteCount / totalScans) * 100) : 0;
+  const percent = (count: number) =>
+    totalScans > 0 ? Math.round((count / totalScans) * 100) : 0;
+  const safePercent = percent(cleanCount);
+  const suspiciousPercent = percent(suspiciousCount);
+  const maliciousPercent = percent(maliciousCount);
+  const incompletePercent = percent(incompleteCount);
+  const invalidPercent = percent(invalidCount);
+  const otherPercent = percent(otherCount);
 
   // Extract recent threat indicators from actual scan findings
   const recentFindings: { title: string; weight: number; url: string; scanId: string }[] = [];
   for (const s of recentScans) {
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(s.findings || "[]");
-      for (const f of parsed) {
-        if (f.weight >= 20 && recentFindings.length < 5) {
-          recentFindings.push({
-            title: f.title,
-            weight: f.weight,
-            url: s.originalUrl,
-            scanId: s.id,
-          });
-        }
+      parsed = JSON.parse(s.findings);
+    } catch (error) {
+      console.error(`Unable to read findings for scan ${s.id}:`, error);
+      continue;
+    }
+    if (!Array.isArray(parsed)) {
+      console.error(`Ignoring malformed findings for scan ${s.id}: expected an array.`);
+      continue;
+    }
+    for (const finding of parsed) {
+      if (
+        typeof finding === "object" &&
+        finding !== null &&
+        "weight" in finding &&
+        "title" in finding &&
+        typeof finding.weight === "number" &&
+        typeof finding.title === "string" &&
+        finding.weight >= 20 &&
+        recentFindings.length < 5
+      ) {
+        recentFindings.push({
+          title: finding.title,
+          weight: finding.weight,
+          url: s.originalUrl,
+          scanId: s.id,
+        });
       }
-    } catch {}
+    }
   }
 
   // Provider statuses
   const vtConfigured = !!process.env.VIRUSTOTAL_API_KEY?.trim();
   const gsbConfigured = !!process.env.GOOGLE_SAFE_BROWSING_API_KEY?.trim();
+  const urlhausConfigured = !!process.env.URLHAUS_AUTH_KEY?.trim();
 
   return (
     <div className="space-y-8">
@@ -104,6 +144,13 @@ export default async function DashboardPage() {
           >
             <PlusCircle className="h-4 w-4" />
             New URL Scan
+          </Link>
+          <Link
+            href="/assistant"
+            className="soc-btn-secondary !py-2 !px-3 !text-xs"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Ask Assistant
           </Link>
           <a
             href="/scanner"
@@ -217,10 +264,20 @@ export default async function DashboardPage() {
                   className="bg-soc-muted/40 h-full transition-all"
                   title={`Incomplete: ${incompletePercent}%`}
                 />
+                <div
+                  style={{ width: `${invalidPercent}%` }}
+                  className="bg-slate-400 h-full transition-all"
+                  title={`Invalid URL: ${invalidPercent}%`}
+                />
+                <div
+                  style={{ width: `${otherPercent}%` }}
+                  className="bg-sky-400 h-full transition-all"
+                  title={`Other: ${otherPercent}%`}
+                />
               </div>
 
               {/* Legend Grid */}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 text-xs">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 text-xs">
                 <div className="rounded border border-soc-border bg-soc-dark p-2.5">
                   <div className="flex items-center gap-1.5 text-soc-rose font-semibold">
                     <span className="h-2.5 w-2.5 rounded-full bg-soc-rose"></span>
@@ -252,6 +309,22 @@ export default async function DashboardPage() {
                   </div>
                   <div className="mt-1 font-mono text-lg font-bold text-white">{incompleteCount} ({incompletePercent}%)</div>
                 </div>
+                <div className="rounded border border-soc-border bg-soc-dark p-2.5">
+                  <div className="flex items-center gap-1.5 text-slate-500 font-semibold">
+                    <span className="h-2.5 w-2.5 rounded-full bg-slate-400"></span>
+                    Invalid URL
+                  </div>
+                  <div className="mt-1 font-mono text-lg font-bold text-white">{invalidCount} ({invalidPercent}%)</div>
+                </div>
+                {otherCount > 0 && (
+                  <div className="rounded border border-soc-border bg-soc-dark p-2.5">
+                    <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400 font-semibold">
+                      <span className="h-2.5 w-2.5 rounded-full bg-sky-400"></span>
+                      Other / Legacy
+                    </div>
+                    <div className="mt-1 font-mono text-lg font-bold text-white">{otherCount} ({otherPercent}%)</div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -286,7 +359,9 @@ export default async function DashboardPage() {
 
             <div className="flex items-center justify-between rounded border border-soc-border bg-soc-dark p-2.5">
               <span>URLhaus (abuse.ch)</span>
-              <span className="soc-badge soc-badge-safe">Active</span>
+              <span className={`soc-badge ${urlhausConfigured ? "soc-badge-safe" : "soc-badge-neutral"}`}>
+                {urlhausConfigured ? "Connected" : "Key Needed"}
+              </span>
             </div>
 
             <div className="flex items-center justify-between rounded border border-soc-border bg-soc-dark p-2.5">
@@ -335,7 +410,7 @@ export default async function DashboardPage() {
                 </thead>
                 <tbody className="divide-y divide-soc-border/60">
                   {recentScans.map((scan) => (
-                    <tr key={scan.id} className="hover:bg-soc-dark/60 transition-colors">
+                    <tr key={scan.id} className="hover:bg-soc-card-hover transition-colors">
                       <td className="py-2.5 pr-4 font-mono max-w-[220px] truncate text-white">
                         {scan.originalUrl}
                       </td>
@@ -357,11 +432,13 @@ export default async function DashboardPage() {
                       <td className="py-2.5 pr-3 font-mono font-bold">
                         <span
                           className={
-                            scan.score >= 65
+                            scan.classification === "MALICIOUS"
                               ? "text-soc-rose"
                               : scan.score >= 25
                               ? "text-soc-amber"
-                              : "text-emerald-400"
+                              : scan.classification === "NO THREAT DETECTED" || scan.classification === "Safe"
+                              ? "text-soc-emerald"
+                              : "text-soc-muted"
                           }
                         >
                           {scan.score}/100
@@ -415,6 +492,12 @@ export default async function DashboardPage() {
                   <p className="font-mono text-[10px] text-soc-muted truncate">
                     Target: {f.url}
                   </p>
+                  <Link
+                    href={`/scan/${f.scanId}`}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-soc-accent hover:underline"
+                  >
+                    View scan details <ArrowRight className="h-3 w-3" />
+                  </Link>
                 </div>
               ))}
             </div>

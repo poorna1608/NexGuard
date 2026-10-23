@@ -284,11 +284,13 @@ export default function HistoryPage() {
                     <td className="py-3 px-4 font-mono whitespace-nowrap">
                       <span
                         className={`font-bold ${
-                          scan.score >= 65
+                          scan.classification === "MALICIOUS"
                             ? "text-soc-rose"
                             : scan.score >= 25
                             ? "text-soc-amber"
-                            : "text-emerald-400"
+                            : scan.classification === "NO THREAT DETECTED" || scan.classification === "Safe"
+                            ? "text-soc-emerald"
+                            : "text-soc-muted"
                         }`}
                       >
                         {scan.score}/100

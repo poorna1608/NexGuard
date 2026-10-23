@@ -7,13 +7,16 @@ The complete application is located in the [`nexguard`](./nexguard/) folder.
 ## Quick Start (PowerShell)
 
 ```powershell
-cd nexguard
+Set-Location C:\Users\apoor\Downloads\nexguard\nexguard
 npm install
-npx prisma db push
+npm test
+npm run typecheck
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
+
+The app uses its existing SQLite database at `nexguard\prisma\dev.db`. Do not run `npx prisma db push` as a setup step; see the app README for environment setup and safe database backup/restore instructions.
 
 ## SOC Color Codes & Documentation
 

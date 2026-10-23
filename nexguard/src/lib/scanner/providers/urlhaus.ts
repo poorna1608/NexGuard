@@ -1,5 +1,20 @@
 import { ProviderResult } from "../types";
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function providerError(verdict: string, errorMessage: string): ProviderResult {
+  return {
+    provider: "URLhaus (abuse.ch)",
+    status: "configured_error",
+    detected: false,
+    verdict,
+    errorMessage,
+    lastChecked: new Date().toISOString(),
+  };
+}
+
 /**
  * URLhaus by abuse.ch Integration
  *
@@ -10,6 +25,18 @@ export async function checkUrlhaus(url: string): Promise<ProviderResult> {
   const authKey = process.env.URLHAUS_AUTH_KEY?.trim();
   const endpoint = "https://urlhaus-api.abuse.ch/v1/url/";
 
+  if (!authKey) {
+    return {
+      provider: "URLhaus (abuse.ch)",
+      status: "not_configured",
+      detected: false,
+      verdict: "Not Configured",
+      errorMessage:
+        "URLHAUS_AUTH_KEY is not set. Configure a URLhaus Auth-Key in the server-side .env file to enable lookups.",
+      lastChecked: new Date().toISOString(),
+    };
+  }
+
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 5000);
 
@@ -18,9 +45,7 @@ export async function checkUrlhaus(url: string): Promise<ProviderResult> {
       "Content-Type": "application/x-www-form-urlencoded",
       Accept: "application/json",
     };
-    if (authKey) {
-      headers["Auth-Key"] = authKey;
-    }
+    headers["Auth-Key"] = authKey;
 
     const res = await fetch(endpoint, {
       method: "POST",
@@ -29,16 +54,25 @@ export async function checkUrlhaus(url: string): Promise<ProviderResult> {
       signal: controller.signal,
     });
 
-    clearTimeout(timeoutId);
-
     if (res.ok) {
-      const data = await res.json();
-      const queryStatus = data?.query_status;
+      const data: unknown = await res.json();
+      if (!isRecord(data) || typeof data.query_status !== "string") {
+        return providerError("Invalid Response", "URLhaus returned a malformed response.");
+      }
+      const queryStatus = data.query_status;
 
       if (queryStatus === "ok") {
-        const threat = data?.threat || "malware_download";
-        const tags = data?.tags || [];
-        const urlStatus = data?.url_status || "unknown";
+        if (typeof data.threat !== "string") {
+          return providerError(
+            "Invalid Response",
+            "URLhaus reported a match without a threat classification."
+          );
+        }
+        const tags = Array.isArray(data.tags)
+          ? data.tags.filter((tag): tag is string => typeof tag === "string")
+          : [];
+        const threat = data.threat;
+        const urlStatus = typeof data.url_status === "string" ? data.url_status : "unknown";
 
         return {
           provider: "URLhaus (abuse.ch)",
@@ -50,9 +84,9 @@ export async function checkUrlhaus(url: string): Promise<ProviderResult> {
             threat,
             tags,
             urlStatus,
-            dateAdded: data?.date_added,
-            reporter: data?.reporter,
-            urlhausReference: data?.urlhaus_reference,
+            dateAdded: data.date_added,
+            reporter: data.reporter,
+            urlhausReference: data.urlhaus_reference,
           },
           lastChecked: new Date().toISOString(),
         };
@@ -73,36 +107,28 @@ export async function checkUrlhaus(url: string): Promise<ProviderResult> {
         };
       }
 
-      return {
-        provider: "URLhaus (abuse.ch)",
-        status: "configured_active",
-        detected: false,
-        verdict: "Query Completed",
-        details: { queryStatus },
-        lastChecked: new Date().toISOString(),
-      };
+      return providerError(
+        "Invalid Response",
+        `URLhaus returned an unsupported query status: ${queryStatus}.`
+      );
     }
 
-    return {
-      provider: "URLhaus (abuse.ch)",
-      status: "configured_error",
-      detected: false,
-      verdict: "Service Error",
-      errorMessage: `URLhaus returned HTTP status ${res.status}.`,
-      lastChecked: new Date().toISOString(),
-    };
-  } catch (err: any) {
-    clearTimeout(timeoutId);
-    const isTimeout = err.name === "AbortError";
-    return {
-      provider: "URLhaus (abuse.ch)",
-      status: "configured_error",
-      detected: false,
-      verdict: isTimeout ? "Timeout" : "Connection Error",
-      errorMessage: isTimeout
+    return providerError(
+      "Service Error",
+      `URLhaus returned HTTP status ${res.status}.`
+    );
+  } catch (err: unknown) {
+    if (err instanceof SyntaxError) {
+      return providerError("Invalid Response", "URLhaus returned invalid JSON.");
+    }
+    const isTimeout = err instanceof Error && err.name === "AbortError";
+    return providerError(
+      isTimeout ? "Timeout" : "Connection Error",
+      isTimeout
         ? "URLhaus request timed out after 5 seconds."
-        : `Could not reach URLhaus: ${err.message || String(err)}`,
-      lastChecked: new Date().toISOString(),
-    };
+        : "Could not connect to URLhaus."
+    );
+  } finally {
+    clearTimeout(timeoutId);
   }
 }

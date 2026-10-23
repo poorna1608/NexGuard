@@ -123,10 +123,10 @@ export default function SettingsPage() {
                   </div>
                   <span
                     className={`soc-badge ${
-                      p.status === "configured_active" ? "soc-badge-safe" : "soc-badge-neutral"
+                      p.configured ? "soc-badge-safe" : "soc-badge-neutral"
                     }`}
                   >
-                    {p.status === "configured_active" ? "Configured & Active" : "Key Not Configured"}
+                    {p.configured ? "Configured; checked per scan" : "Key Not Configured"}
                   </span>
                 </div>
 

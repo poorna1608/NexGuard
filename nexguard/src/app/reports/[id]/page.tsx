@@ -8,7 +8,6 @@ import {
   ShieldCheck,
   AlertTriangle,
   ArrowLeft,
-  Printer,
   Download,
   Calendar,
   Lock,
@@ -19,6 +18,7 @@ import {
   FileCheck,
 } from "lucide-react";
 import { Finding, ProviderResult, DomainInfo, CertificateInfo, RedirectHop } from "@/lib/scanner/types";
+import { PrintButton } from "@/components/PrintButton";
 
 export const metadata = {
   title: "Official Security Audit Report – NexGuard SOC",
@@ -64,14 +64,7 @@ export default async function ReportDetailsPage({ params }: { params: { id: stri
           >
             Technical View
           </Link>
-          <button
-            onClick={() => {}} // Will be handled by print stylesheet or browser print
-            className="soc-btn-primary !py-1.5 !px-3 !text-xs inline-flex items-center gap-1.5"
-            // @ts-ignore
-            onclick="window.print()"
-          >
-            <Printer className="h-3.5 w-3.5" /> Print / Save as PDF
-          </button>
+          <PrintButton />
         </div>
       </div>
 

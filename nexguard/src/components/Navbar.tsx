@@ -12,6 +12,7 @@ import {
   FileText,
   GraduationCap,
   HelpCircle,
+  MessageCircle,
   User,
   Settings,
   ExternalLink,
@@ -60,6 +61,7 @@ export function Navbar({ user }: NavbarProps) {
   const authNavItems = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "URL Scanner", href: "/scanner", icon: Search, openInNewTabAllowed: true },
+    { name: "Security Assistant", href: "/assistant", icon: MessageCircle },
     { name: "Scan History", href: "/history", icon: History },
     { name: "Security Analysis", href: "/analysis", icon: BarChart3 },
     { name: "Security Reports", href: "/reports", icon: FileText, openInNewTabAllowed: true },
@@ -69,6 +71,7 @@ export function Navbar({ user }: NavbarProps) {
 
   const publicNavItems = [
     { name: "Live Scanner", href: "/scanner", icon: Search },
+    { name: "Security Assistant", href: "/assistant", icon: MessageCircle },
     { name: "Security Awareness", href: "/awareness", icon: GraduationCap },
     { name: "Help & Docs", href: "/help", icon: HelpCircle },
   ];

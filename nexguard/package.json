@@ -3,7 +3,7 @@
   "scripts": {
     "dev": "next dev", "build": "next build", "start": "next start",
     "lint": "next lint", "typecheck": "tsc --noEmit", "test": "vitest run",
-    "db:push": "prisma migrate dev --name init", "postinstall": "prisma generate"
+    "db:push": "prisma migrate dev --name init", "db:chat-history": "prisma db execute --file ./prisma/migrations/20261023120000_add_chat_history/migration.sql --schema ./prisma/schema.prisma && prisma generate", "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "5.22.0", "bcryptjs": "2.4.3", "jose": "5.9.6",

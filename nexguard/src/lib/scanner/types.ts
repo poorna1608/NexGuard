@@ -19,6 +19,7 @@ export interface Finding {
 
 export type ProviderStatusCode =
   | "configured_active"
+  | "configured_pending"
   | "configured_error"
   | "not_configured"
   | "unsupported";

@@ -48,34 +48,34 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* Real-time Threat Intelligence Integration Banner */}
+      {/* Threat intelligence source information */}
       <section className="soc-card p-6 border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900 shadow-sm">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="space-y-1 text-center md:text-left">
             <h3 className="text-sm font-bold text-slate-900 dark:text-white flex items-center justify-center md:justify-start gap-2">
               <Cpu className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-              Connected Threat Intelligence Feeds
+              Threat Intelligence Sources
             </h3>
             <p className="text-xs text-slate-600 dark:text-slate-400">
-              Continuous cross-referencing across multi-engine malware databases and authoritative registries.
+              Sources are checked during scans. VirusTotal and Google Safe Browsing require server-side API keys.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-3 text-xs font-mono">
             <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-              VirusTotal v3
+              <span className="h-2 w-2 rounded-full bg-slate-400"></span>
+              VirusTotal (key required)
             </div>
             <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-              Google Safe Browsing
+              <span className="h-2 w-2 rounded-full bg-slate-400"></span>
+              Safe Browsing (key required)
             </div>
             <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span className="h-2 w-2 rounded-full bg-slate-400"></span>
               URLhaus (abuse.ch)
             </div>
             <div className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-slate-800 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200">
-              <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span className="h-2 w-2 rounded-full bg-slate-400"></span>
               ICANN RDAP / DNS
             </div>
           </div>
@@ -113,7 +113,7 @@ export default async function HomePage() {
             </div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white">Threat Intelligence</h3>
             <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
-              Cross-references destination URLs against VirusTotal’s 70+ antivirus engines, Google Safe Browsing malware/phishing lists, 
+              Cross-references destination URLs against VirusTotal threat engines, Google Safe Browsing malware/phishing lists,
               and abuse.ch URLhaus active malware delivery feeds.
             </p>
           </div>

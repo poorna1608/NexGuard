@@ -155,11 +155,13 @@ export default async function ReportsPage({
                   <div className="text-right">
                     <span
                       className={`font-mono text-lg font-extrabold ${
-                        report.score >= 65
+                        report.classification === "MALICIOUS"
                           ? "text-soc-rose"
                           : report.score >= 25
                           ? "text-soc-amber"
-                          : "text-emerald-400"
+                          : isClean
+                          ? "text-soc-emerald"
+                          : "text-soc-muted"
                       }`}
                     >
                       {report.score}
