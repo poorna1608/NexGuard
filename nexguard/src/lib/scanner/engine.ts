@@ -285,7 +285,7 @@ export async function scanUrlAsync(
   let classification: Classification = "NO THREAT DETECTED";
   let scanStatus: "completed" | "partial" | "failed" = "completed";
 
-  if (hasConfirmedThreat) {
+  if (hasConfirmedThreat || finalScore >= 65) {
     classification = "MALICIOUS";
   } else if (finalScore >= 25) {
     classification = "SUSPICIOUS";
@@ -315,7 +315,9 @@ export async function scanUrlAsync(
   // 7. Summary & Recommendations Generation
   let summary = "";
   if (classification === "MALICIOUS") {
-    summary = `Strong indicators of malicious activity detected (Risk score ${finalScore}/100). The destination exhibits significant threat signatures or matches active cyber threat intelligence feeds.`;
+    summary = hasConfirmedThreat
+      ? `Strong indicators of malicious activity detected (Risk score ${finalScore}/100). The destination matches active cyber threat intelligence feeds.`
+      : `High-risk malicious patterns detected (Risk score ${finalScore}/100). Multiple structural indicators warrant treating this URL as dangerous, although no threat-intelligence provider confirmed the match.`;
     recommendations.push(
       "Do NOT open this link or enter any passwords, emails, or personal data.",
       "If you received this link in an email or SMS, report it to your IT security department or email provider as phishing.",
@@ -343,7 +345,7 @@ export async function scanUrlAsync(
   }
 
   notes.push(
-    "The score is the sum of unique finding weights, capped at 100; it is not a probability. Heuristic findings alone do not confirm malicious intent.",
+    "The score is the sum of unique finding weights, capped at 100; it is not a probability. A high-risk heuristic classification is a precautionary verdict, not proof of a confirmed threat.",
     "HTTPS encryption protects data in transit, but phishing sites routinely use valid SSL/TLS certificates."
   );
 

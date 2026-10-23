@@ -93,7 +93,7 @@ export default function HelpPage() {
           <div className="rounded border border-soc-rose/30 bg-soc-rose/5 p-3.5 space-y-1">
             <div className="flex items-center gap-2 text-soc-rose font-bold">
               <span className="h-2 w-2 rounded-full bg-soc-rose"></span>
-              MALICIOUS (Provider-confirmed)
+              MALICIOUS (Provider-confirmed or high-risk heuristic score ≥65)
             </div>
             <p className="text-soc-text leading-relaxed">
               A supported threat-intelligence provider returned a threat match. Review the provider and evidence shown in the report. Do NOT click or enter credentials.
@@ -103,7 +103,7 @@ export default function HelpPage() {
           <div className="rounded border border-soc-amber/30 bg-soc-amber/5 p-3.5 space-y-1">
             <div className="flex items-center gap-2 text-soc-amber font-bold">
               <span className="h-2 w-2 rounded-full bg-soc-amber"></span>
-              SUSPICIOUS (Risk Score 25–100 / 100)
+              SUSPICIOUS (Risk Score 25–64 / 100)
             </div>
             <p className="text-soc-text leading-relaxed">
               The URL has one or more structural or reputation indicators. Even a high heuristic score is not provider confirmation; verify the sender through an independent trusted channel.

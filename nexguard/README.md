@@ -82,8 +82,8 @@ The migration adds only `ChatConversation` and `ChatMessage` tables and their in
 
 | Risk Classification | Score Range | Color Code | Description |
 | :--- | :--- | :--- | :--- |
-| **`MALICIOUS`** | Provider-confirmed | Red (`#EF4444`) | A supported threat-intelligence provider matched the URL; the report identifies the provider and evidence. |
-| **`SUSPICIOUS`** | **25 – 100** | Amber (`#F59E0B`) | Risk indicators were found. Heuristics alone do not confirm malicious intent. |
+| **`MALICIOUS`** | Provider-confirmed or score **65 – 100** | Red (`#EF4444`) | A supported threat-intelligence provider matched the URL, or multiple high-risk indicators reached the threshold. Heuristic-only verdicts are explicitly identified and are not provider-confirmed. |
+| **`SUSPICIOUS`** | **25 – 64** | Amber (`#F59E0B`) | Risk indicators were found, but did not reach the high-risk threshold or receive a provider confirmation. |
 | **`NO THREAT DETECTED`** | **0 – 24** | Green (`#10B981`) | No indicators were reported by completed checks. This is not a safety guarantee. |
 | **`SCAN INCOMPLETE`** | **0 – 24** | Purple (`#8B5CF6`) | No threat verdict is available because all usable threat-intelligence checks are unavailable, pending, or failed. |
 | **`INVALID URL`** | **0** | Slate (`#64748B`) | Malformed syntax or non-HTTP/HTTPS protocol. |

@@ -40,7 +40,7 @@ afterEach(() => {
 });
 
 describe("scan classification evidence", () => {
-  it("keeps heuristic-only high scores suspicious rather than confirmed malicious", async () => {
+  it("restores the previous malicious verdict for high-risk heuristic scores", async () => {
     vi.mocked(checkVirusTotal).mockResolvedValue(unavailable);
     vi.mocked(checkGoogleSafeBrowsing).mockResolvedValue(unavailable);
     vi.mocked(checkUrlhaus).mockResolvedValue(unavailable);
@@ -51,8 +51,23 @@ describe("scan classification evidence", () => {
     );
 
     expect(result.score).toBeGreaterThanOrEqual(65);
-    expect(result.classification).toBe("SUSPICIOUS");
+    expect(result.classification).toBe("MALICIOUS");
+    expect(result.summary).toContain("no threat-intelligence provider confirmed");
     expect(result.status).toBe("partial");
+  });
+
+  it("keeps lower heuristic scores suspicious", async () => {
+    vi.mocked(checkVirusTotal).mockResolvedValue(unavailable);
+    vi.mocked(checkGoogleSafeBrowsing).mockResolvedValue(unavailable);
+    vi.mocked(checkUrlhaus).mockResolvedValue(unavailable);
+
+    const result = await scanUrlAsync("http://192.168.1.5/", {
+      deepScan: false,
+    });
+
+    expect(result.score).toBeGreaterThanOrEqual(25);
+    expect(result.score).toBeLessThan(65);
+    expect(result.classification).toBe("SUSPICIOUS");
   });
 
   it("classifies a provider-confirmed threat as malicious", async () => {

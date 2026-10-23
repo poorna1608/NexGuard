@@ -30,8 +30,8 @@ export default function ScannerPage() {
             <span>Understanding Risk Classification</span>
           </div>
           <p className="text-soc-muted leading-relaxed">
-            <b>MALICIOUS:</b> Verified threat detection from threat intelligence feeds or critical heuristic evidence (e.g. active malware, brand impersonation).<br />
-            <b>SUSPICIOUS:</b> Contains deceptive structural patterns, typosquatting, or high-risk TLDs requiring caution.<br />
+            <b>MALICIOUS:</b> Confirmed by a threat-intelligence provider, or a high-risk heuristic score of 65 or above. Heuristic-only verdicts are precautionary, not provider-confirmed.<br />
+            <b>SUSPICIOUS:</b> Scores 25–64 from deceptive structural patterns, typosquatting, or other indicators requiring caution.<br />
             <b>NO THREAT DETECTED:</b> No known threats were detected by active security engines and heuristics.
           </p>
         </div>
